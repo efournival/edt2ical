@@ -55,8 +55,7 @@ func (s *Schedule) parseLine(cols []string) {
 	for k, v := range cols {
 		sv := strings.TrimSpace(v)
 
-		// Always ignore first column
-		if len(sv) > 0 && k > 0 {
+		if len(sv) > 0 {
 			if isTimeRange.MatchString(sv) {
 				s.timeRanges[k] = toTimeRange(matchTimeRange.FindAllStringSubmatch(sv, -1)[0])
 			} else if isDay.MatchString(sv) {
@@ -65,7 +64,7 @@ func (s *Schedule) parseLine(cols []string) {
 				s.dates[s.lineIndex] = sv
 			} else if isGroups.MatchString(sv) {
 				s.splitEntryWithGroups(k, s.lineIndex-1, sv)
-			} else if !isGarbage.MatchString(sv) {
+			} else if k > 0 && !isGarbage.MatchString(sv) {
 				s.entries[Coords{k, s.lineIndex}] = sv
 			}
 		}
