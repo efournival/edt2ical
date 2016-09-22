@@ -11,21 +11,21 @@ import (
 )
 
 var (
-	isTimeRange        = regexp.MustCompile(`(?i)^(\d{1,2})h(\d{2})\s*-\s*(\d{1,2})h(\d{2})$`)
+	isTimeRange        = regexp.MustCompile(`(?i)^(\d{1,2})h(\d{2})\s*[\-à]\s*(\d{1,2})h(\d{2})$`)
 	isDay              = regexp.MustCompile(`(?i)^(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)$`)
 	isDate             = regexp.MustCompile(`^(\d{2})[\.|/](\d{2})[\.|/](\d{2,4})`)
-	isGarbage          = regexp.MustCompile(`(?i)(matin|midi|sema|date|conges|\d{2}\s\d{2})`)
-	isGroups           = regexp.MustCompile(`(?i)^(Gr\.*\s*\d{1}){1,3}`)
+	isGarbage          = regexp.MustCompile(`(?i)(matin|midi|sema|date|conges|^\d{2}\s\d{2})`)
 	matchGroup         = regexp.MustCompile(`(?i)Gr\.*\s*(\d{1})`)
-	matchGroupLocation = regexp.MustCompile(`(?i)Gr\.*\s*(\d{1})\s*:\s*[A-Z]{1}\s*\d{3}`)
-	matchTimeRange     = regexp.MustCompile(`(?i)(\d{1,2})h(\d{2})\s*-\s*(\d{1,2})h(\d{2})`)
-	matchLocation      = regexp.MustCompile(`(?mi)(([A-Z]{1}\ *\d{3})|(\w*[\s|\-]*amphi))`)
+	matchGroupLocation = regexp.MustCompile(`(?i)Gr\.*\s*(\d{1})\s*[:-]*\s*(salle)*\s*([A-Z]{1}\s*\d{3})`)
+	matchTimeRange     = regexp.MustCompile(`(?i)(\d{1,2})h(\d{2})\s*[\-à]\s*(\d{1,2})h(\d{2})`)
+	matchLocation      = regexp.MustCompile(`(?mi)((Salle\s*:*\s*([A-Z]{1}\ *\d{3}))|(\w*[\s|\-]*amphi))`)
 	timeZone           = "Europe/Paris"
 )
 
 type Coords struct {
-	X int
-	Y int
+	X  int
+	Y  int
+	_Z int
 }
 
 type TimeRange struct {
@@ -51,6 +51,28 @@ func newSchedule() *Schedule {
 	}
 }
 
+func formatLocation(str string) string {
+	slices := matchLocation.FindAllStringSubmatch(str, -1)[0]
+
+	result := slices[len(slices)-1]
+
+	if len(result) == 0 {
+		result = slices[len(slices)-2]
+	}
+
+	return result
+}
+
+func formatGroup(str string) string {
+	group := matchGroup.FindAllStringSubmatch(str, -1)
+
+	if len(group) > 0 {
+		return "(Gr. " + group[0][1] + ")"
+	}
+
+	return ""
+}
+
 func (s *Schedule) parseLine(cols []string) {
 	for k, v := range cols {
 		sv := strings.TrimSpace(v)
@@ -62,10 +84,8 @@ func (s *Schedule) parseLine(cols []string) {
 				s.days[k] = sv
 			} else if isDate.MatchString(sv) {
 				s.dates[s.lineIndex] = sv
-			} else if isGroups.MatchString(sv) {
-				s.splitEntryWithGroups(k, s.lineIndex-1, sv)
 			} else if k > 0 && !isGarbage.MatchString(sv) {
-				s.entries[Coords{k, s.lineIndex}] = sv
+				s.splitEntry(k, s.lineIndex, sv)
 			}
 		}
 	}
@@ -73,13 +93,19 @@ func (s *Schedule) parseLine(cols []string) {
 	s.lineIndex++
 }
 
-func (s *Schedule) splitEntryWithGroups(x, y int, groups string) {
-	gl := matchGroupLocation.FindAllStringSubmatch(groups, -1)
-	entry := s.entries[Coords{x, y}]
+func (s *Schedule) splitEntry(x, y int, str string) {
+	if matchGroupLocation.MatchString(str) {
+		gl := matchGroupLocation.FindAllStringSubmatch(str, -1)
 
-	for i := 0; i < 3; i++ {
-		// y+i works only because of the CSV format (vertical space of 3 empty lines), watch out
-		s.entries[Coords{x, y + i}] = entry + "\n" + gl[i][0]
+		lines := strings.Split(str, "\n")
+		firstLine := strings.TrimSpace(lines[0])
+		rest := strings.Join(lines[1:], "\n")
+
+		for i := 0; i < len(gl); i++ {
+			s.entries[Coords{x, y, i}] = firstLine + "\n" + gl[i][0] + "\n" + rest
+		}
+	} else {
+		s.entries[Coords{x, y, 0}] = str
 	}
 }
 
@@ -123,12 +149,15 @@ func (s *Schedule) outputCalendar() {
 		ve.DTEND = d.Add(tr.end)
 
 		if matchLocation.MatchString(v) {
-			ve.LOCATION = matchLocation.FindAllStringSubmatch(v, -1)[0][1]
+			ve.LOCATION = formatLocation(matchLocation.FindAllStringSubmatch(v, -1)[0][1])
 		}
 
 		ve.SUMMARY = strings.Split(v, "\n")[0]
+		ve.SUMMARY = strings.TrimSpace(matchGroup.ReplaceAllString(ve.SUMMARY, "")) + " " + formatGroup(v)
 		ve.SUMMARY = strings.TrimSpace(matchTimeRange.ReplaceAllString(ve.SUMMARY, ""))
 		ve.SUMMARY = strings.TrimSpace(matchLocation.ReplaceAllString(ve.SUMMARY, ""))
+		ve.SUMMARY = strings.Split(ve.SUMMARY, ":")[0]
+		ve.SUMMARY = strings.Split(ve.SUMMARY, "-")[0]
 
 		ve.TZID = timeZone
 
