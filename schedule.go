@@ -10,6 +10,13 @@ import (
 	"github.com/colm2/ical"
 )
 
+const (
+	timeZone     = "Europe/Paris"
+	calendarName = "Emploi du temps M1 Informatique"
+	uidHost      = "@edt-m1info.edgar-fournival.fr"
+	uidDTformat  = "20060102T150405"
+)
+
 var (
 	isTimeRange        = regexp.MustCompile(`(?i)^(\d{1,2})h(\d{2})\s*[\-à]\s*(\d{1,2})h(\d{2})$`)
 	isDay              = regexp.MustCompile(`(?i)^(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)$`)
@@ -19,7 +26,6 @@ var (
 	matchGroupLocation = regexp.MustCompile(`(?i)Gr\.*\s*(\d{1})\s*[:-]*\s*(salle)*\s*([A-Z]{1}\s*\d{3})`)
 	matchTimeRange     = regexp.MustCompile(`(?i)(\d{1,2})h(\d{2})\s*[\-à]\s*(\d{1,2})h(\d{2})`)
 	matchLocation      = regexp.MustCompile(`(?mi)((Salle\s*:*\s*([A-Z]{1}\ *\d{3}))|(\w*[\s|\-]*amphi))`)
-	timeZone           = "Europe/Paris"
 )
 
 type Coords struct {
@@ -131,7 +137,7 @@ func (s *Schedule) getDate(x, y int) time.Time {
 
 func (s *Schedule) outputCalendar() {
 	vcal := ical.NewBasicVCalendar()
-	vcal.X_WR_CALNAME = "Emploi du temps M1 Informatique"
+	vcal.X_WR_CALNAME = calendarName
 
 	for k, v := range s.entries {
 		var ve ical.VEvent
@@ -160,6 +166,8 @@ func (s *Schedule) outputCalendar() {
 		ve.SUMMARY = strings.Split(ve.SUMMARY, "-")[0]
 
 		ve.TZID = timeZone
+
+		ve.UID = ve.DTSTART.Format(uidDTformat) + "-" + strings.Replace(ve.SUMMARY, " ", "", -1) + uidHost
 
 		vcal.VComponent = append(vcal.VComponent, &ve)
 	}
