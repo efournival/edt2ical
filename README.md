@@ -15,7 +15,7 @@ ICAL est utilisé par Google Calendar et la plupart des applis d'agenda.
 
 Il faut tout d'abord convertir l'emploi du temps au format PDF en XLSX (Microsoft Excel) ou ODS (LibreOffice Calc), par exemple via ce site :
 
-https://online2pdf.com/pdf2excel
+https://docs.zone/pdf-to-excel
 
 L'ouvrir ensuite à l'aide d'un tableur et le convertir en CSV.
 
