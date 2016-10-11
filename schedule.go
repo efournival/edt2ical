@@ -21,7 +21,7 @@ var (
 	isTimeRange        = regexp.MustCompile(`(?i)^(\d{1,2})\s?h\s?(\d{2})\s*[\-à]\s*(\d{1,2})\s?h\s?(\d{2})$`)
 	isDay              = regexp.MustCompile(`(?i)^(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)$`)
 	isDate             = regexp.MustCompile(`^(\d{2})[\.|/](\d{2})[\.|/](\d{2,4})`)
-	isGarbage          = regexp.MustCompile(`(?i)(matin|midi|sema|date|conges|^\d{2}\s\d{2})`)
+	isGarbage          = regexp.MustCompile(`(?i)(matin|midi|semaine|date|conges|page|réserve|^\d{2}\s\d{2})`)
 	matchGroup         = regexp.MustCompile(`(?i)Gr\.*\s*(\d{1})`)
 	matchGroupLocation = regexp.MustCompile(`(?i)Gr\.*\s*(\d{1})\s*[:-]*\s*(salle)*\s*([A-Z]{1}\s*\d{3})`)
 	matchTimeRange     = regexp.MustCompile(`(?i)(\d{1,2})\s?h\s?(\d{2})\s*[\-à]\s*(\d{1,2})\s?h\s?(\d{2})`)
