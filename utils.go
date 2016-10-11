@@ -59,3 +59,14 @@ func toTimeRange(tr []string) TimeRange {
 	return TimeRange{strToDuration(tr[1])*time.Hour + strToDuration(tr[2])*time.Minute,
 		strToDuration(tr[3])*time.Hour + strToDuration(tr[4])*time.Minute}
 }
+
+func isWrongLine(str string) bool {
+	str = strings.Split(str, "\n")[0]
+	str = matchGroup.ReplaceAllString(str, "")
+	str = matchTimeRange.ReplaceAllString(str, "")
+	str = matchLocation.ReplaceAllString(str, "")
+	str = strings.Split(str, ":")[0]
+	str = strings.Split(str, "-")[0]
+
+	return len(strings.TrimSpace(str)) == 0
+}

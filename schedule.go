@@ -91,7 +91,12 @@ func (s *Schedule) parseLine(cols []string) {
 			} else if isDate.MatchString(sv) {
 				s.dates[s.lineIndex] = sv
 			} else if k > 0 && !isGarbage.MatchString(sv) {
-				s.splitEntry(k, s.lineIndex, sv)
+				if isWrongLine(sv) {
+					// Reintegrate groups/location in the entry of the previous line
+					s.splitEntry(k, s.lineIndex-1, s.entries[Coords{k, s.lineIndex - 1, 0}]+"\n"+sv)
+				} else {
+					s.splitEntry(k, s.lineIndex, sv)
+				}
 			}
 		}
 	}
@@ -156,11 +161,12 @@ func (s *Schedule) outputCalendar() {
 		}
 
 		ve.SUMMARY = strings.Split(v, "\n")[0]
-		ve.SUMMARY = strings.TrimSpace(matchGroup.ReplaceAllString(ve.SUMMARY, "")) + " " + formatGroup(v)
-		ve.SUMMARY = strings.TrimSpace(matchTimeRange.ReplaceAllString(ve.SUMMARY, ""))
-		ve.SUMMARY = strings.TrimSpace(matchLocation.ReplaceAllString(ve.SUMMARY, ""))
+		ve.SUMMARY = matchGroup.ReplaceAllString(ve.SUMMARY, "") + " " + formatGroup(v)
+		ve.SUMMARY = matchTimeRange.ReplaceAllString(ve.SUMMARY, "")
+		ve.SUMMARY = matchLocation.ReplaceAllString(ve.SUMMARY, "")
 		ve.SUMMARY = strings.Split(ve.SUMMARY, ":")[0]
 		ve.SUMMARY = strings.Split(ve.SUMMARY, "-")[0]
+		ve.SUMMARY = strings.TrimSpace(ve.SUMMARY)
 
 		ve.TZID = timeZone
 
