@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
 	"time"
@@ -21,11 +22,13 @@ var (
 	isTimeRange        = regexp.MustCompile(`(?i)^(\d{1,2})\s?h\s?(\d{2})\s*[\-à]\s*(\d{1,2})\s?h\s?(\d{2})$`)
 	isDay              = regexp.MustCompile(`(?i)^(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)$`)
 	isDate             = regexp.MustCompile(`^(\d{2})[\.|/](\d{2})[\.|/](\d{2,4})`)
-	isGarbage          = regexp.MustCompile(`(?i)(matin|midi|semaine|date|conges|page|réserve|^\d{2}\s\d{2})`)
+	isGarbage          = regexp.MustCompile(`(?i)(matin|midi|semaine|date|conges|page|réserve|reserve|^\d{2}\s\d{2})`)
 	matchGroup         = regexp.MustCompile(`(?i)Gr\.*\s*(\d{1})`)
-	matchGroupLocation = regexp.MustCompile(`(?i)Gr\.*\s*(\d{1})\s*[:-]*\s*(salle)*\s*([A-Z]{1}\s*\d{3})`)
+	matchGroupLocation = regexp.MustCompile(`(?i)Gr\.*\s*(\d{1})[:-|\s]*(salle|\s*)([A-Z]{1}\s*\d{3})`)
+	matchTERLocation   = regexp.MustCompile(`(?i)TER\s*(\d{1})\n(salle)*\s*[:-]*\s*([A-Z]{1}\s*\d{3})`)
 	matchTimeRange     = regexp.MustCompile(`(?i)(\d{1,2})\s?h\s?(\d{2})\s*[\-à]\s*(\d{1,2})\s?h\s?(\d{2})`)
-	matchLocation      = regexp.MustCompile(`(?mi)((Salle\s*:*\s*([A-Z]{1}\ *\d{3}))|(\w*[\s|\-]*amphi))`)
+	matchLocation      = regexp.MustCompile(`(?i)\s*(((Salle)*\s*:*\s*([A-Z]{1}\ *\d{3}))|(\w*[\s|\-]*amphi))`)
+	cleanup            = regexp.MustCompile(`(?i)(option\s*:*\s\n*)`)
 )
 
 type Coords struct {
@@ -40,43 +43,35 @@ type TimeRange struct {
 }
 
 type Schedule struct {
-	timeRanges map[int]TimeRange // pos X
-	days       map[int]string    // pos X
-	dates      map[int]string    // pos Y
-	entries    map[Coords]string // X, Y
-	lineIndex  int
+	tables    []*Table
+	daysIndex int
+	lineIndex int
 }
 
 func newSchedule() *Schedule {
 	return &Schedule{
+		daysIndex: 0,
+		lineIndex: 0,
+	}
+}
+
+func (s *Schedule) addTable() {
+	t := &Table{
 		timeRanges: make(map[int]TimeRange),
 		days:       make(map[int]string),
 		dates:      make(map[int]string),
 		entries:    make(map[Coords]string),
-		lineIndex:  0,
 	}
+
+	s.tables = append(s.tables, t)
 }
 
-func formatLocation(str string) string {
-	slices := matchLocation.FindAllStringSubmatch(str, -1)[0]
-
-	result := slices[len(slices)-1]
-
-	if len(result) == 0 {
-		result = slices[len(slices)-2]
+func (s *Schedule) table() *Table {
+	if len(s.tables) == 0 {
+		panic("FAILURE: trying to insert things before a table header")
 	}
 
-	return result
-}
-
-func formatGroup(str string) string {
-	group := matchGroup.FindAllStringSubmatch(str, -1)
-
-	if len(group) > 0 {
-		return "(Gr. " + group[0][1] + ")"
-	}
-
-	return ""
+	return s.tables[len(s.tables)-1]
 }
 
 func (s *Schedule) parseLine(cols []string) {
@@ -85,17 +80,47 @@ func (s *Schedule) parseLine(cols []string) {
 
 		if len(sv) > 0 {
 			if isTimeRange.MatchString(sv) {
-				s.timeRanges[k] = toTimeRange(matchTimeRange.FindAllStringSubmatch(sv, -1)[0])
+				s.table().timeRanges[k] = toTimeRange(matchTimeRange.FindAllStringSubmatch(sv, -1)[0])
+
+				if debug {
+					log.Printf("(%d:%d) Found a time range: '%s'\n", k, s.lineIndex, sv)
+				}
 			} else if isDay.MatchString(sv) {
-				s.days[k] = sv
+				// New header = new table, support for multiple time tables in one schedule file
+				if s.daysIndex != s.lineIndex {
+					s.addTable()
+					s.daysIndex = s.lineIndex
+
+					if debug {
+						log.Printf("(%d:%d) Switching to a new table\n", k, s.lineIndex)
+					}
+				}
+
+				s.table().days[k] = sv
+
+				if debug {
+					log.Printf("(%d:%d) Found a day: '%s'\n", k, s.lineIndex, sv)
+				}
 			} else if isDate.MatchString(sv) {
-				s.dates[s.lineIndex] = sv
+				s.table().dates[s.lineIndex] = sv
+
+				if debug {
+					log.Printf("(%d:%d) Found a date: '%s'\n", k, s.lineIndex, sv)
+				}
 			} else if k > 0 && !isGarbage.MatchString(sv) {
+				if debug {
+					log.Printf("(%d:%d) Found an entry: '%s'\n", k, s.lineIndex, one(sv))
+				}
+
 				if isWrongLine(sv) {
+					if debug {
+						log.Printf("Wrong line detected, reintegrating\n")
+					}
+
 					// Reintegrate groups/location in the entry of the previous line
-					s.splitEntry(k, s.lineIndex-1, s.entries[Coords{k, s.lineIndex - 1, 0}]+"\n"+sv)
+					s.table().splitEntry(k, s.lineIndex-1, s.table().entries[Coords{k, s.lineIndex - 1, 0}]+"\n"+sv)
 				} else {
-					s.splitEntry(k, s.lineIndex, sv)
+					s.table().splitEntry(k, s.lineIndex, sv)
 				}
 			}
 		}
@@ -104,75 +129,49 @@ func (s *Schedule) parseLine(cols []string) {
 	s.lineIndex++
 }
 
-func (s *Schedule) splitEntry(x, y int, str string) {
-	if matchGroupLocation.MatchString(str) {
-		gl := matchGroupLocation.FindAllStringSubmatch(str, -1)
-
-		lines := strings.Split(str, "\n")
-		firstLine := strings.TrimSpace(lines[0])
-		rest := strings.Join(lines[1:], "\n")
-
-		for i := 0; i < len(gl); i++ {
-			s.entries[Coords{x, y, i}] = firstLine + "\n" + gl[i][0] + "\n" + rest
-		}
-	} else {
-		s.entries[Coords{x, y, 0}] = str
-	}
-}
-
-func (s *Schedule) getDate(x, y int) time.Time {
-	rawBaseDate := isDate.FindAllStringSubmatch(mapFindLowerInterval(s.dates, y), -1)
-
-	year := strToInt(rawBaseDate[0][3])
-
-	// XX -> 20XX
-	if year < 2000 {
-		year += 2000
-	}
-
-	tz, _ := time.LoadLocation(timeZone)
-	baseDate := time.Date(year, time.Month(strToInt(rawBaseDate[0][2])), strToInt(rawBaseDate[0][1]), 0, 0, 0, 0, tz)
-
-	day := mapFindLowerInterval(s.days, x)
-	return baseDate.Add(time.Duration(getDayOffset(day)*24) * time.Hour)
-}
-
 func (s *Schedule) outputCalendar() {
 	vcal := ical.NewBasicVCalendar()
 	vcal.X_WR_CALNAME = calendarName
 
-	for k, v := range s.entries {
-		var ve ical.VEvent
-		var tr TimeRange
-
-		d := s.getDate(k.X, k.Y)
-
-		if matchTimeRange.MatchString(v) {
-			tr = toTimeRange(matchTimeRange.FindAllStringSubmatch(v, -1)[0])
-		} else {
-			tr = s.timeRanges[k.X]
+	for n, t := range s.tables {
+		if debug {
+			log.Printf("Starting output of table %d\n", n)
 		}
 
-		ve.DTSTART = d.Add(tr.start)
-		ve.DTEND = d.Add(tr.end)
+		for k, v := range t.entries {
+			var ve ical.VEvent
+			var tr TimeRange
 
-		if matchLocation.MatchString(v) {
-			ve.LOCATION = formatLocation(matchLocation.FindAllStringSubmatch(v, -1)[0][1])
+			d := t.getDate(k.X, k.Y)
+
+			if matchTimeRange.MatchString(v) {
+				tr = toTimeRange(matchTimeRange.FindAllStringSubmatch(v, -1)[0])
+			} else {
+				tr = mapFindLowerIntervalTR(t.timeRanges, k.X)
+			}
+
+			ve.DTSTART = d.Add(tr.start)
+			ve.DTEND = d.Add(tr.end)
+
+			if matchLocation.MatchString(v) {
+				ve.LOCATION = formatLocation(matchLocation.FindAllStringSubmatch(v, -1)[0][1])
+			}
+
+			ve.SUMMARY = cleanup.ReplaceAllString(v, "")
+			ve.SUMMARY = strings.Split(ve.SUMMARY, "\n")[0]
+			ve.SUMMARY = matchGroup.ReplaceAllString(ve.SUMMARY, "") + " " + formatGroup(v)
+			ve.SUMMARY = matchTimeRange.ReplaceAllString(ve.SUMMARY, "")
+			ve.SUMMARY = matchLocation.ReplaceAllString(ve.SUMMARY, "")
+			ve.SUMMARY = strings.Split(ve.SUMMARY, "-")[0]
+			ve.SUMMARY = strings.Split(ve.SUMMARY, "+")[0]
+			ve.SUMMARY = strings.TrimSpace(ve.SUMMARY)
+
+			ve.TZID = timeZone
+
+			ve.UID = ve.DTSTART.Format(uidDTformat) + "-" + strings.Replace(ve.SUMMARY, " ", "", -1) + uidHost
+
+			vcal.VComponent = append(vcal.VComponent, &ve)
 		}
-
-		ve.SUMMARY = strings.Split(v, "\n")[0]
-		ve.SUMMARY = matchGroup.ReplaceAllString(ve.SUMMARY, "") + " " + formatGroup(v)
-		ve.SUMMARY = matchTimeRange.ReplaceAllString(ve.SUMMARY, "")
-		ve.SUMMARY = matchLocation.ReplaceAllString(ve.SUMMARY, "")
-		ve.SUMMARY = strings.Split(ve.SUMMARY, ":")[0]
-		ve.SUMMARY = strings.Split(ve.SUMMARY, "-")[0]
-		ve.SUMMARY = strings.TrimSpace(ve.SUMMARY)
-
-		ve.TZID = timeZone
-
-		ve.UID = ve.DTSTART.Format(uidDTformat) + "-" + strings.Replace(ve.SUMMARY, " ", "", -1) + uidHost
-
-		vcal.VComponent = append(vcal.VComponent, &ve)
 	}
 
 	var b bytes.Buffer
@@ -181,5 +180,9 @@ func (s *Schedule) outputCalendar() {
 		panic(err)
 	}
 
-	fmt.Print(b.String())
+	if debug {
+		log.Printf("Finished output\n")
+	} else {
+		fmt.Print(b.String())
+	}
 }

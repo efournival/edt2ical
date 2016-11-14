@@ -20,8 +20,24 @@ func strToDuration(str string) time.Duration {
 	return time.Duration(strToInt(str))
 }
 
-func mapFindLowerInterval(m map[int]string, l int) string {
+func mapFindLowerIntervalS(m map[int]string, l int) string {
 	last := ""
+
+	for i := 0; i < 100; i++ {
+		if v, ok := m[i]; ok {
+			last = v
+		}
+
+		if i >= l {
+			return last
+		}
+	}
+
+	return last
+}
+
+func mapFindLowerIntervalTR(m map[int]TimeRange, l int) TimeRange {
+	last := TimeRange{}
 
 	for i := 0; i < 100; i++ {
 		if v, ok := m[i]; ok {
@@ -61,12 +77,39 @@ func toTimeRange(tr []string) TimeRange {
 }
 
 func isWrongLine(str string) bool {
+	str = cleanup.ReplaceAllString(str, "")
 	str = strings.Split(str, "\n")[0]
 	str = matchGroup.ReplaceAllString(str, "")
 	str = matchTimeRange.ReplaceAllString(str, "")
 	str = matchLocation.ReplaceAllString(str, "")
-	str = strings.Split(str, ":")[0]
 	str = strings.Split(str, "-")[0]
+	str = strings.Split(str, "+")[0]
 
 	return len(strings.TrimSpace(str)) == 0
+}
+
+func formatLocation(str string) string {
+	slices := matchLocation.FindAllStringSubmatch(str, -1)[0]
+
+	result := slices[len(slices)-1]
+
+	if len(result) == 0 {
+		result = slices[len(slices)-2]
+	}
+
+	return result
+}
+
+func formatGroup(str string) string {
+	group := matchGroup.FindAllStringSubmatch(str, -1)
+
+	if len(group) > 0 {
+		return "(Gr. " + group[0][1] + ")"
+	}
+
+	return ""
+}
+
+func one(str string) string {
+	return strings.Replace(str, "\n", "↩", -1)
 }
