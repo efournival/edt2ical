@@ -157,6 +157,10 @@ func (s *Schedule) outputCalendar() {
 				ve.LOCATION = formatLocation(matchLocation.FindAllStringSubmatch(v, -1)[0][1])
 			}
 
+			if matchGroupLocation.MatchString(v) {
+				ve.LOCATION = formatLocation(matchGroupLocation.FindAllStringSubmatch(v, -1)[0][3])
+			}
+
 			ve.SUMMARY = cleanup.ReplaceAllString(v, "")
 			ve.SUMMARY = strings.Split(ve.SUMMARY, "\n")[0]
 			ve.SUMMARY = matchGroup.ReplaceAllString(ve.SUMMARY, "") + " " + formatGroup(v)
