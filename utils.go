@@ -77,13 +77,13 @@ func toTimeRange(tr []string) TimeRange {
 }
 
 func isWrongLine(str string) bool {
-	str = cleanup.ReplaceAllString(str, "")
 	str = strings.Split(str, "\n")[0]
 	str = matchGroup.ReplaceAllString(str, "")
 	str = matchTimeRange.ReplaceAllString(str, "")
 	str = matchLocation.ReplaceAllString(str, "")
 	str = strings.Split(str, "-")[0]
 	str = strings.Split(str, "+")[0]
+	str = cleanup.ReplaceAllString(str, "")
 
 	return len(strings.TrimSpace(str)) == 0
 }

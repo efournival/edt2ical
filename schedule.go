@@ -28,7 +28,7 @@ var (
 	matchTERLocation   = regexp.MustCompile(`(?i)TER\s*(\d{1})\n(salle)*\s*[:-]*\s*([A-Z]{1}\s*\d{3})`)
 	matchTimeRange     = regexp.MustCompile(`(?i)(\d{1,2})\s?h\s?(\d{2})\s*[\-à]\s*(\d{1,2})\s?h\s?(\d{2})`)
 	matchLocation      = regexp.MustCompile(`(?i)\s*(((Salle)*\s*:*\s*([A-Z]{1}\ *\d{3}))|(\w*[\s|\-]*amphi))`)
-	cleanup            = regexp.MustCompile(`(?i)(option\s*:*\s\n*)`)
+	cleanup            = regexp.MustCompile(`(?i)option\s*:*\s\n*|Tp\s*$`)
 )
 
 type Coords struct {
@@ -114,7 +114,7 @@ func (s *Schedule) parseLine(cols []string) {
 
 				if isWrongLine(sv) {
 					if debug {
-						log.Printf("Wrong line detected, reintegrating\n")
+						log.Printf("Wrong line detected, reintegrating '%s'\n", sv)
 					}
 
 					// Reintegrate groups/location in the entry of the previous line
