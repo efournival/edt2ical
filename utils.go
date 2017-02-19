@@ -94,7 +94,7 @@ func formatLocation(str string) string {
 	result := slices[len(slices)-1]
 
 	if len(result) == 0 {
-		result = slices[len(slices)-2]
+		result = slices[len(slices)-3]
 	}
 
 	return result
